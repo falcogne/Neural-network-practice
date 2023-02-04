@@ -1,5 +1,7 @@
 # slow down there bud, you're already lost
 
+import math
+
 class Network():
     def __init__(self, nodes=[2,2]):
         self.layers = [InputLayer(nodes[0])]
@@ -37,8 +39,14 @@ class InputLayer(Layer):
 class Node():
 
     def __init__(self, value, b, prevLayer=None, nextLayer=None):
-        self.val = value
+        self.val = value # this is `a` on the slides
         self.b = b
+        self.z = None
+        # self.a = None
+        self.dldz = None
+        self.func =  lambda z : 1 / (1+math.e**(-z))
+        self.deriv = lambda z : (math.e**(-z)) / ((1+math.e**(-z))**2)
+        # self.sigmaDeriv = lambda z : (math.e**(z)) / ((1+math.e**(z))**2) # apparently equivalent
         self.backConnections = []
         self.frontConnections = []
 
@@ -57,11 +65,30 @@ class Node():
             else:
                 self.frontConnections.append(Connection(self, node))
 
+    def calcVal(self):
+        sum = 0
+        for conn in self.backConnections:
+            sum += conn.weight * conn.backNode.val
+        self.z = sum + self.b
+        self.val = self.func(self.z)
+
+    def calcdldz(self):
+        sum = 0
+        for conn in self.frontConnections:
+            if conn.frontNode.dldz is None:
+                raise ValueError('front node must have already calculated dl/dz in order to calculate node\'s dldz value - not implemented recursively')
+            sum += conn.weight * conn.frontNode.dldz
+        if self.z is None:
+            raise ValueError('self node\'s z must already be set when trying to calculate dldz')
+        return self.deriv(self.z) * sum
+
     def errorCheck(self):
-        if type(self.val) is not int:
-            raise TypeError(f'node value is not int: {self.val}')
+        if type(self.val) is not float:
+            raise TypeError(f'node value is not float: {self.val}')
+        if self.val != self.func(self.z):
+            raise TypeError(f'node value is not equal to sigma function of self.z: {self.val} != func({self.z})')
         if type(self.b) is not int:
-            raise TypeError(f"node's b is not int: {self.b}")
+            raise TypeError(f"node's b is not float: {self.b}")
         
         for conn in self.backConnections:
             if conn.frontNode is not self:
@@ -78,3 +105,8 @@ class Connection():
         self.frontNode = frontNode
         self.weight = 0 # TODO: does it initialize to 0?
 
+    def calcdzdw(self):
+        return self.backNode.val
+    
+    def calcdldw(self):
+        return self.calcdzdw() * self.frontNode.calcdldz()
